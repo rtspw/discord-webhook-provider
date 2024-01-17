@@ -1,12 +1,13 @@
 const fs = require('node:fs/promises')
 const path = require('node:path')
 const { exit } = require('node:process')
+const logger = require('pino')()
 
 const createDanbooruProvider = require('./create-danbooru-provider')
 
 const providers = {
-	'sunny_milk_feed': createDanbooruProvider({ tags: ['sunny_milk'] }),
-	'amamiya_kokoro_feed': createDanbooruProvider({ tags: ['sunny_milk'] })
+	'sunny_milk_feed': createDanbooruProvider({ name: 'sunny_milk_feed', tags: ['sunny_milk'] }),
+	'amamiya_kokoro_feed': createDanbooruProvider({ name: 'amamiya_kokoro_feed', tags: ['sunny_milk'] })
 }
 
 const personalities = {
@@ -22,11 +23,14 @@ const personalities = {
 
 const webhookEndpoints = {}
 
-function createDupRemoverMiddleware() {
+function createDupRemoverMiddleware(name) {
 	const seenIds = new Set()
 	return (data) => {
 		const currId = data.metadata.info.id
-		if (seenIds.has(currId)) return null
+		if (seenIds.has(currId)) {
+			logger.info({ middleware: name, id: currId }, 'Duplicate found')
+			return null
+		}
 		seenIds.add(currId)
 		return {
 			webhook: data.webhook,
@@ -56,7 +60,7 @@ async function readConfig() {
 		const configFile = await fs.readFile(path.join(__dirname, 'config.json'))
 		return JSON.parse(configFile)
 	} catch (e) {
-		console.error(e)
+		logger.fatal(e)
 		exit(1)
 	}
 }
@@ -67,7 +71,6 @@ async function sendWebhook(endpointName, webhook) {
 	const webhookUrl = new URL(`https://discord.com/api/webhooks/${endpointInfo.id}/${endpointInfo.token}`);
 	webhookUrl.searchParams.set('wait', 'true')
 	const body = JSON.stringify(webhook);
-	console.log(body)
 	const options = {
 		method: 'POST',
 		headers: {
@@ -95,19 +98,21 @@ function hookUpMappings(mappings) {
 				if (_data === null) return;
 			}
 			const webhookPersonality = personality === null ? null : { username: personality.name, avatar_url: personality.url }
+			logger.info({ from, to, person }, 'Sending webhook')
 			sendWebhook(to, { ...data.webhook, ...webhookPersonality })
 		}
 	}
 }
 
-
-
 async function main() {
+	logger.info('Reading config and loading endpoint info.')
 	const config = await readConfig()
 	config.webhooks.forEach(({ tag, id, token }) => {
 		webhookEndpoints[tag] = { id, token }
 	})
+	logger.info('Hooking up mappings.')
 	hookUpMappings(mappings)
+	logger.info('Starting up each provider.')
 	Object.values(providers).forEach(provider => provider.start())
 }
 

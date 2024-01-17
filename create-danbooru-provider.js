@@ -1,4 +1,5 @@
 const { formatBytes, makeReadableList, capitalizeFirstLetter, truncateString, checkFieldsAreDefined } = require('./util')
+const logger = require('pino')()
 
 const baseEndpoint = 'https://testbooru.donmai.us'
 
@@ -16,7 +17,7 @@ function cleanUpTags(tags) {
 
 module.exports = function createDanbooruProvider (options) {
 	let { onProvide = null } = options
-	const { tags, startId = null, interval = 60000 } = options
+	const { name, tags, startId = null, interval = 60000 } = options
 	let lastId = startId
 	let timer = null
 
@@ -27,14 +28,13 @@ module.exports = function createDanbooruProvider (options) {
 			options.push(`id:>=${lastId}`)
 		}
 		const endpoint = `${baseEndpoint}/posts.json?limit=1&tags=${ [...tags, ...options].join('+')}`
-		console.log(endpoint)
 		try {
 			const result = await fetch(endpoint)
 			const json = await result.json()
 			if (json.length === 0) throw new Error('No results')
 			return json[0]
 		} catch(e) {
-			console.error(e)
+			logger.error(e)
 			return null
 		}
 	}
@@ -77,10 +77,10 @@ module.exports = function createDanbooruProvider (options) {
 				return { image: { url: postInfo.previewUrl }}
 			}
 			if (['zip'].includes(postInfo.fileExt)) {
-				console.log(`Ugoira file type not supported`)
+				logger.warn(`Ugoira file type not supported`)
 				return null
 			}
-			console.log(`Unknown file type`)
+			logger.warn(`Unknown file type`)
 			return null
 		})()
 		const embedArtist = postInfo.artists.length > 0 ? { description: `By **[${postInfo.readableArtists}](${postInfo.artistUrl})**` } : null
@@ -98,16 +98,22 @@ module.exports = function createDanbooruProvider (options) {
 	}
 
 	async function runIteration() {
-		if (onProvide === null) return;
-		console.log('Getting most recent post')
+		if (onProvide === null) {
+			logger.warn({ provider: name }, 'Tried to run iteration but onProvide is not set.')
+			return;
+		}
+		logger.info({ provider: name, lastId }, 'Running iteration.')
 		const post = await getMostRecentPost()
 		if (post === null) return;
+		logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
 		const postInfo = extractPostInfo(post)
-		if (post['id'] === lastId) {
-			console.log('Checked but no new items')
+		logger.info({ provider: name, postInfo })
+		if (post.id === lastId) {
+			logger.info({ provider: name, lastId, currId: post.id }, 'Checked but no new items')
 			return;
 		}
 		lastId = post.id
+		logger.info('Converting post into webhook.')
 		const webhook = convertPostToWebhook(postInfo)
 		onProvide({
 			webhook,
