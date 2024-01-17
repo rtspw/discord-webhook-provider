@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "node-json-db": "^2.3.0",
     "pino": "^8.17.2"
   }
 }

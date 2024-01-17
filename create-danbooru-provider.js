@@ -17,8 +17,8 @@ function cleanUpTags(tags) {
 
 module.exports = function createDanbooruProvider (options) {
 	let { onProvide = null } = options
-	const { name, tags, startId = null, interval = 60000 } = options
-	let lastId = startId
+	const { name, tags, persistence, interval = 60000 } = options
+	let lastId = null
 	let timer = null
 
 	async function getMostRecentPost() {
@@ -109,11 +109,13 @@ module.exports = function createDanbooruProvider (options) {
 		const postInfo = extractPostInfo(post)
 		logger.info({ provider: name, postInfo })
 		if (post.id === lastId) {
-			logger.info({ provider: name, lastId, currId: post.id }, 'Checked but no new items')
+			logger.info({ provider: name, lastId, currId: post.id }, 'Checked but no new items.')
 			return;
 		}
 		lastId = post.id
-		logger.info('Converting post into webhook.')
+		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
+		await persistence.push(`/providers/${name}/lastId`, post.id)
+		logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
 		const webhook = convertPostToWebhook(postInfo)
 		onProvide({
 			webhook,
@@ -122,6 +124,10 @@ module.exports = function createDanbooruProvider (options) {
 				info: postInfo,
 			}
 		})
+	}
+
+	async function init() {
+		lastId = await persistence.getObjectDefault(`/providers/${name}/lastId`, null)
 	}
 
 	function start() {
@@ -134,6 +140,7 @@ module.exports = function createDanbooruProvider (options) {
 	}
 
 	return {
+		init,
 		start,
 		stop,
 		get onProvide() { return onProvide },

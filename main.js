@@ -2,12 +2,15 @@ const fs = require('node:fs/promises')
 const path = require('node:path')
 const { exit } = require('node:process')
 const logger = require('pino')()
+const { JsonDB, Config } = require('node-json-db')
 
 const createDanbooruProvider = require('./create-danbooru-provider')
 
+const persistence = new JsonDB(new Config('persistence', true, false, '/'))
+
 const providers = {
-	'sunny_milk_feed': createDanbooruProvider({ name: 'sunny_milk_feed', tags: ['sunny_milk'] }),
-	'amamiya_kokoro_feed': createDanbooruProvider({ name: 'amamiya_kokoro_feed', tags: ['sunny_milk'] })
+	'sunny_milk_feed': createDanbooruProvider({ name: 'sunny_milk_feed', tags: ['sunny_milk'], persistence }),
+	'amamiya_kokoro_feed': createDanbooruProvider({ name: 'amamiya_kokoro_feed', tags: ['sunny_milk'], persistence })
 }
 
 const personalities = {
@@ -28,7 +31,7 @@ function createDupRemoverMiddleware(name) {
 	return (data) => {
 		const currId = data.metadata.info.id
 		if (seenIds.has(currId)) {
-			logger.info({ middleware: name, id: currId }, 'Duplicate found')
+			logger.info({ middleware: name, id: currId }, 'Duplicate found.')
 			return null
 		}
 		seenIds.add(currId)
@@ -98,7 +101,7 @@ function hookUpMappings(mappings) {
 				if (_data === null) return;
 			}
 			const webhookPersonality = personality === null ? null : { username: personality.name, avatar_url: personality.url }
-			logger.info({ from, to, person }, 'Sending webhook')
+			logger.info({ from, to, person }, 'Sending webhook.')
 			sendWebhook(to, { ...data.webhook, ...webhookPersonality })
 		}
 	}
@@ -112,9 +115,10 @@ async function main() {
 	})
 	logger.info('Hooking up mappings.')
 	hookUpMappings(mappings)
+	logger.info('Loading initial values for each provider.')
+	await Promise.all(Object.values(providers).map(provider => provider.init()))
 	logger.info('Starting up each provider.')
 	Object.values(providers).forEach(provider => provider.start())
 }
 
 main()
-
