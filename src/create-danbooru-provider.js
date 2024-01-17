@@ -1,7 +1,7 @@
 const { formatBytes, makeReadableList, capitalizeFirstLetter, truncateString, checkFieldsAreDefined } = require('./util')
 const logger = require('pino')()
 
-const baseEndpoint = 'https://testbooru.donmai.us'
+const baseEndpoint = 'https://danbooru.donmai.us'
 
 /** Makes booru style tags more human readable, e.g. klee_(genshin_impact) -> Klee */
 function cleanUpTags(tags) {
@@ -17,7 +17,8 @@ function cleanUpTags(tags) {
 
 module.exports = function createDanbooruProvider (options) {
 	let { onProvide = null } = options
-	const { name, tags, persistence, interval = 60000 } = options
+	const { name, tags, persistence = null, interval = 60000 } = options
+	let state = 'idle'
 	let lastId = null
 	let timer = null
 
@@ -28,9 +29,11 @@ module.exports = function createDanbooruProvider (options) {
 			options.push(`id:>=${lastId}`)
 		}
 		const endpoint = `${baseEndpoint}/posts.json?limit=1&tags=${ [...tags, ...options].join('+')}`
+		logger.info({ provider: name, endpoint }, 'Sending request.')
 		try {
 			const result = await fetch(endpoint)
 			const json = await result.json()
+			if ('success' in json && !json.success) throw new Error(json?.message)
 			if (json.length === 0) throw new Error('No results')
 			return json[0]
 		} catch(e) {
@@ -114,10 +117,13 @@ module.exports = function createDanbooruProvider (options) {
 		}
 		lastId = post.id
 		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
-		await persistence.push(`/providers/${name}/lastId`, post.id)
+		if (persistence !== null) {
+			await persistence.push(`/providers/${name}/lastId`, post.id)
+		}
 		logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
 		const webhook = convertPostToWebhook(postInfo)
 		onProvide({
+			provider: {	name, type: 'danbooru' },
 			webhook,
 			metadata: {
 				raw: post,
@@ -127,15 +133,24 @@ module.exports = function createDanbooruProvider (options) {
 	}
 
 	async function init() {
-		lastId = await persistence.getObjectDefault(`/providers/${name}/lastId`, null)
+		logger.info({ provider: name }, 'Initializing provider.')
+		if (persistence !== null) {
+			lastId = await persistence.getObjectDefault(`/providers/${name}/lastId`, null)
+		}
 	}
 
 	function start() {
+		if (state === 'running') return;
+		logger.info({ provider: name }, 'Starting provider.')
+		state = 'running'
 		runIteration()
 		timer = setInterval(runIteration, interval)
 	}
 
   function stop() {
+		if (state === 'idle') return;
+		logger.info({ provider: name }, 'Stopping provider.')
+		state = 'idle'
 		clearInterval(timer)
 	}
 
@@ -145,5 +160,6 @@ module.exports = function createDanbooruProvider (options) {
 		stop,
 		get onProvide() { return onProvide },
 		set onProvide(callback) { onProvide = callback },
+		get state() { return state },
 	}
 }
