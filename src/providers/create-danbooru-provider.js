@@ -1,4 +1,4 @@
-const { formatBytes, makeReadableList, capitalizeFirstLetter, truncateString, checkFieldsAreDefined } = require('./util')
+const { formatBytes, makeReadableList, capitalizeFirstLetter, truncateString, checkFieldsAreDefined } = require('../util')
 const logger = require('pino')()
 
 const baseEndpoint = 'https://danbooru.donmai.us'
@@ -33,8 +33,14 @@ module.exports = function createDanbooruProvider (options) {
 		try {
 			const result = await fetch(endpoint)
 			const json = await result.json()
-			if ('success' in json && !json.success) throw new Error(json?.message)
-			if (json.length === 0) throw new Error('No results')
+			if ('success' in json && !json.success) {
+				logger.error({ provider: name, endpoint, json }, 'Unsuccessful fetch.')
+				return null
+			}
+			if (json.length === 0) {
+				logger.warn({ provider: name, endpoint }, 'Got no results.')
+				return null
+			}
 			return json[0]
 		} catch(e) {
 			logger.error(e)
