@@ -8,6 +8,7 @@ const logger = require('pino')()
 function createRemoveDuplicatesMiddleware(name) {
 	const seenIds = new Set()
 	return (data) => {
+		logger.info({ provider: data.provider, middleware: name }, 'Running middleware.')
     if (data.provider.type !== 'danbooru') return null
 		const currId = data.metadata.info.id
 		if (seenIds.has(currId)) {
