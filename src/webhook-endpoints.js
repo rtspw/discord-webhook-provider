@@ -15,20 +15,24 @@ class WebhookEndpoints {
 		try {
 			const file = await fs.readFile(path.resolve(__dirname, '..', filename))
 			const json = JSON.parse(file)
-			json.forEach(({ name, id, token }) => { this.addEndpoint(name, id, token) })
+			json.forEach(({ name, id, token }) => { this.add(name, id, token) })
 		} catch (e) {
 			logger.fatal(e)
 			exit(1)
 		}
 	}
 
-	addEndpoint(name, id, token) {
+	add(name, id, token) {
 		this.endpoints[name] = { id, token }
 	}
 
+	get(name) {
+		if (!(name in this.endpoints)) throw new Error(`Endpoint (${name}) was not found`)
+		return this.endpoints[name]
+	}
+
 	async sendWebhook(name, webhook) {
-		if (this.endpoints[name] === undefined) throw new Error(`Webhook endpoint with name (${name}) does not exist`)
-		const endpoint = this.endpoints[name]
+		const endpoint = this.get(name)
 		const webhookUrl = new URL(`${WebhookEndpoints.baseUrl}/${endpoint.id}/${endpoint.token}`);
 		webhookUrl.searchParams.set('wait', 'true')
 		const body = JSON.stringify(webhook);

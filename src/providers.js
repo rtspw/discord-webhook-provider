@@ -51,6 +51,7 @@ class Providers {
 	}
 
 	unsetOnProvide(name) {
+		const provider = this.get(name)
 		provider.onProvide = null
 	}
 }
