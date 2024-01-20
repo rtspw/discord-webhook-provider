@@ -3,14 +3,14 @@ const Personalities = require('../src/personalities')
 describe('Personalities', () => {
   test('Adding personalities', () => {
     const personalities = new Personalities()
-    personalities.push('tag', 'nameA', 'example.com/a.png')
+    personalities.add('tag', 'nameA', 'example.com/a.png')
     expect(personalities.persons).toEqual({
       tag: {
         displayName: 'nameA',
         avatarUrl: 'example.com/a.png',
       },
     })
-    personalities.push('tag2', 'nameB', 'example.com/b.png')
+    personalities.add('tag2', 'nameB', 'example.com/b.png')
     expect(personalities.persons).toEqual({
       tag: {
         displayName: 'nameA',
@@ -24,8 +24,8 @@ describe('Personalities', () => {
   })
   test('Updating personalities', () => {
     const personalities = new Personalities()
-    personalities.push('tag', 'nameA', 'example.com/a.png')
-    personalities.push('tag', 'nameB', 'example.com/b.png')
+    personalities.add('tag', 'nameA', 'example.com/a.png')
+    personalities.add('tag', 'nameB', 'example.com/b.png')
     expect(personalities.persons).toEqual({
       tag: {
         displayName: 'nameB',
@@ -35,13 +35,13 @@ describe('Personalities', () => {
   })
   test('Removing personalities', () => {
     const personalities = new Personalities()
-    personalities.push('tag', 'nameA', 'example.com/a.png')
-    personalities.delete('tag')
+    personalities.add('tag', 'nameA', 'example.com/a.png')
+    personalities.remove('tag')
     expect(personalities.persons).toEqual({})
   })
   test('Appending personality to webhook when personality exists', () => {
     const personalities = new Personalities()
-    personalities.push('tag', 'nameA', 'example.com/a.png')
+    personalities.add('tag', 'nameA', 'example.com/a.png')
     const webhook = {}
     const newWebhook = personalities.appendToWebhook('tag', webhook)
     expect(newWebhook).toEqual({

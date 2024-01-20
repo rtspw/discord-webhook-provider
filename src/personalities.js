@@ -5,12 +5,12 @@ class Personalities {
 		this.persons = persons
 	}
 
-	push(name, displayName, avatarUrl) {
+	add(name, displayName, avatarUrl) {
 		this.persons[name] = { displayName, avatarUrl }
 		logger.info({ name, displayName, avatarUrl }, 'Personality added.')
 	}
 
-	delete(name) {
+	remove(name) {
 		delete this.persons[name]
 		logger.info({ name }, 'Personality deleted.')
 	}
