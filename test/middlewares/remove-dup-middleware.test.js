@@ -13,13 +13,13 @@ function createMockDanbooruPacket(id) {
 
 describe('Remove Duplicates Middleware', () => {
   test('Block packets with duplicate danbooru post', () => {
-    const middleware = createRemoveDuplicatesMiddleware('temp')
+    const middleware = createRemoveDuplicatesMiddleware({ name: 'temp' })
     const p1 = createMockDanbooruPacket(0)
     const p2 = createMockDanbooruPacket(0)
     const p3 = createMockDanbooruPacket(1)
-    const r1 = middleware(p1)
-    const r2 = middleware(p2)
-    const r3 = middleware(p3)
+    const r1 = middleware.run(p1)
+    const r2 = middleware.run(p2)
+    const r3 = middleware.run(p3)
     expect(r1).toEqual(p1)
     expect(r2).toBeNull()
     expect(r3).toEqual(p3)

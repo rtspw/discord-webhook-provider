@@ -1,5 +1,8 @@
 function createMockMiddleware() {
-  return jest.fn(x => x)
+  return {
+    type: 'mock',
+    run: jest.fn(x => x)
+  }
 }
 
 function createMockPacket() {

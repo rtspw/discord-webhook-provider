@@ -16,8 +16,10 @@ function cleanUpTags(tags) {
 }
 
 module.exports = function createDanbooruProvider (options) {
-	let { onProvide = null } = options
-	const { name, tags, persistence = null, interval = 60000 } = options
+	let onProvide = null
+	const { name, tags, interval = 60000, persistence = null } = options
+	const type = 'danbooru'
+	const args = { name, tags, interval }
 	let state = 'idle'
 	let lastId = null
 	let timer = null
@@ -125,6 +127,7 @@ module.exports = function createDanbooruProvider (options) {
 		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
 		if (persistence !== null) {
 			await persistence.push(`/providers/${name}/lastId`, post.id)
+			await persistence.save()
 		}
 		logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
 		const webhook = convertPostToWebhook(postInfo)
@@ -167,5 +170,7 @@ module.exports = function createDanbooruProvider (options) {
 		get onProvide() { return onProvide },
 		set onProvide(callback) { onProvide = callback },
 		get state() { return state },
+		get type() { return type },
+		get args() { return args },
 	}
 }

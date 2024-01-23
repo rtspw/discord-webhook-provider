@@ -1,13 +1,14 @@
 const logger = require('pino')()
-const { JsonDB, Config } = require('node-json-db')
 
 const createDanbooruProvider = require('./providers/create-danbooru-provider')
 const createRemoveDuplicatesMiddleware = require('./middlewares/remove-dup-middleware')
 const createAllowedRatingsFilter = require('./middlewares/create-allowed-ratings-filter-middleware')
 const createBlockedTagsFilter = require('./middlewares/create-blocked-tags-filter-middleware')
-const { compose } = require('./middlewares/compose')
+const { composeWithRegistry } = require('./middlewares/compose')
 
-const persistence = new JsonDB(new Config('persistence', true, false, '/'))
+const { MiddlewareRegistry } = require('./middlewares/registry')
+
+const { getPersistence, saveMappingsFrom, saveMiddlewareRegistryFrom, loadMiddlewareRegistryInto, loadMappingsInto, loadProvidersInto, loadPersonalitiesInto, saveEndpointsFrom, savePersonalitiesFrom, saveProvidersFrom} = require('./persistence')
 const Providers = require('./providers')
 const Personalities = require('./personalities')
 const WebhookEndpoints = require('./webhook-endpoints')
@@ -24,77 +25,96 @@ const personalityInfo = {
 	},
 	'Tojiko': {
 		displayName: 'Soga no Tojiko',
-		avatarUrl: 'https://cdn.discordapp.com/emojis/1062392114220122165.png',
+		avatarUrl: 'https://cdn.discordapp.com/attachments/1059178872207310858/1062406133874176000/54972842_p26_cropped.png',
 	},
 	'Miko': {
 		displayName: 'Toyosatomimi no Miko',
-		avatarUrl: 'https://cdn.discordapp.com/emojis/1120385932189765682.png',
+		avatarUrl: 'https://cdn.discordapp.com/attachments/1059178872207310858/1062406133572190338/54972842_p26_cropped_2.png',
 	},
 	'Futo': {
 		displayName: 'Mononobe no Futo',
-		avatarUrl: 'https://cdn.discordapp.com/emojis/1095312560611397744.png',
+		avatarUrl: 'https://cdn.discordapp.com/attachments/1059178872207310858/1062406135639977984/54972842_p26_cropped_3.png',
 	},
 	'Seiga': {
 		displayName: 'Seiga Kaku',
-		avatarUrl: 'https://cdn.discordapp.com/emojis/1146077793633964042.png',
+		avatarUrl: 'https://cdn.discordapp.com/attachments/1059178872207310858/1062406134964686990/66992655_p20_cropped_1.png',
 	},
 	'Yoshika': {
 		displayName: 'Yoshika Miyako',
-		avatarUrl: 'https://cdn.discordapp.com/emojis/1072558524325957683.png',
+		avatarUrl: 'https://cdn.discordapp.com/attachments/1059178872207310858/1062406135291855028/66992655_p20_cropped.png',
 	}
 }
 
-const middlewares = {
-	'dup_remover': createRemoveDuplicatesMiddleware('dup_remover'),
-	'safe_rating_only': createAllowedRatingsFilter('safe_rating_only', ['g', 's']),
-	'discord_tos_filter': createBlockedTagsFilter('discord_tos_filter', ['loli', 'guro'])
-}
+async function initHardcodedValues({ middlewareRegistry, personalities, providers, mapping }) {
+	logger.info('Setting initial hardcoded values')
 
-async function main() {
-	const webhookEndpoints = new WebhookEndpoints()
-	await webhookEndpoints.loadFromFile('endpoints.json')
-	const personalities = new Personalities(personalityInfo)
-	const providers = new Providers({
-		'soga_no_tojiko_feed': createDanbooruProvider({ name: 'soga_no_tojiko_feed', tags: ['soga_no_tojiko'], persistence }),
-		'mononobe_no_futo_feed': createDanbooruProvider({ name: 'mononobe_no_futo_feed', tags: ['mononobe_no_futo'], persistence }),
-		'toyosatomimi_no_miko_feed': createDanbooruProvider({ name: 'toyosatomimi_no_miko', tags: ['toyosatomimi_no_miko'], persistence }),
-		'seiga_kaku_feed': createDanbooruProvider({ name: 'seiga_kaku_feed', tags: ['kaku_seiga'], persistence }),
-		'miyako_yoshika_feed': createDanbooruProvider({ name: 'miyako_yoshika_feed', tags: ['miyako_yoshika'], persistence }),
-	})
-	logger.info('Loading initial values for each provider.')
-	providers.initAll();
-	const mapping = new Mapping(providers, webhookEndpoints, personalities)
-	const sharedMiddleware = compose(middlewares['dup_remover'], middlewares['safe_rating_only'], middlewares['discord_tos_filter'])
+	const persistence = getPersistence()
+	middlewareRegistry.add('dup_remover', createRemoveDuplicatesMiddleware({ name: 'dup_remover' }))
+	middlewareRegistry.add('safe_rating_only', createAllowedRatingsFilter({ name: 'safe_rating_only', ratings: ['g'] }))
+	middlewareRegistry.add('discord_tos_filter', createBlockedTagsFilter({ name: 'discord_tos_filter', tags: ['loli', 'guro'] }))
+	providers.add('soga_no_tojiko_feed', createDanbooruProvider({ name: 'soga_no_tojiko_feed', tags: ['soga_no_tojiko'], interval: 180000, persistence }))
+	providers.add('mononobe_no_futo_feed', createDanbooruProvider({ name: 'mononobe_no_futo_feed', tags: ['mononobe_no_futo'], interval: 180000, persistence }))
+	providers.add('toyosatomimi_no_miko_feed', createDanbooruProvider({ name: 'toyosatomimi_no_miko_feed', tags: ['toyosatomimi_no_miko'], interval: 180000, persistence }))
+	providers.add('seiga_kaku_feed', createDanbooruProvider({ name: 'seiga_kaku_feed', tags: ['kaku_seiga'], interval: 180000, persistence }))
+	providers.add('miyako_yoshika_feed', createDanbooruProvider({ name: 'miyako_yoshika_feed', tags: ['miyako_yoshika'], interval: 180000, persistence }))
+	for (const [name, info] of Object.entries(personalityInfo)) {
+		personalities.add(name, info.displayName, info.avatarUrl)
+	}
+	const sharedMiddleware = composeWithRegistry(middlewareRegistry, 'dup_remover', 'safe_rating_only', 'discord_tos_filter')
 	mapping.addMapping({
 		from: 'soga_no_tojiko_feed',
-		to: 'testing_server',
+		to: 'divine_spirit_mausoleum',
 		middlewares: [sharedMiddleware],
 		personality: 'Tojiko',
 	})
 	mapping.addMapping({
 		from: 'mononobe_no_futo_feed',
-		to: 'testing_server',
+		to: 'divine_spirit_mausoleum',
 		middlewares: [sharedMiddleware],
 		personality: 'Futo',
 	})
 	mapping.addMapping({
 		from: 'toyosatomimi_no_miko_feed',
-		to: 'testing_server',
+		to: 'divine_spirit_mausoleum',
 		middlewares: [sharedMiddleware],
 		personality: 'Miko',
 	})
 	mapping.addMapping({
 		from: 'seiga_kaku_feed',
-		to: 'testing_server',
+		to: 'divine_spirit_mausoleum',
 		middlewares: [sharedMiddleware],
 		personality: 'Seiga',
 	})
 	mapping.addMapping({
 		from: 'miyako_yoshika_feed',
-		to: 'testing_server',
+		to: 'divine_spirit_mausoleum',
 		middlewares: [sharedMiddleware],
 		personality: 'Yoshika',
 	})
+	logger.info('Saving initial values')
+	savePersonalitiesFrom(personalities)
+	saveMiddlewareRegistryFrom(middlewareRegistry)
+	saveMappingsFrom(mapping)
+	saveProvidersFrom(providers)
+}
+
+async function main() {
+	const providers = new Providers()
+	// await loadProvidersInto(providers)
+	const webhookEndpoints = new WebhookEndpoints()
+	await webhookEndpoints.loadFromFile('endpoints.json')
+	const personalities = new Personalities()
+	// await loadPersonalitiesInto(personalities)
+	const middlewareRegistry = new MiddlewareRegistry()
+	// await loadMiddlewareRegistryInto(middlewareRegistry)
+	const mapping = new Mapping(providers, webhookEndpoints, personalities, middlewareRegistry)
+	// await loadMappingsInto(mapping, middlewareRegistry)
+
+	await initHardcodedValues({ middlewareRegistry, personalities, providers, mapping })
+
+	logger.info('Loading initial values for each provider.')
+	await providers.initAll();
+
 	logger.info('Starting up each provider.')
 	providers.startAll()
 }
