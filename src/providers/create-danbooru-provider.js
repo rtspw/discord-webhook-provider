@@ -40,7 +40,7 @@ module.exports = function createDanbooruProvider (options) {
 				return null
 			}
 			if (json.length === 0) {
-				logger.log({ provider: name, endpoint }, 'Got no results.')
+				logger.info({ provider: name, endpoint }, 'Got no results.')
 				return null
 			}
 			return json[0]
@@ -115,7 +115,7 @@ module.exports = function createDanbooruProvider (options) {
 		logger.info({ provider: name, lastId }, 'Running iteration.')
 		const post = await getMostRecentPost()
 		if (post === null) {
-			logger.info({ provider: name, lastId, currId: post.id }, 'Checked but no new items.')
+			logger.info({ provider: name, lastId }, 'Checked but no new items.')
 			return;
 		}
 		logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
