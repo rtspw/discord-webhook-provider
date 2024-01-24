@@ -28,7 +28,7 @@ module.exports = function createDanbooruProvider (options) {
 		const options = []
 		if (lastId !== null) {
 			options.push('order:id')
-			options.push(`id:>=${lastId}`)
+			options.push(`id:>${lastId}`)
 		}
 		const endpoint = `${baseEndpoint}/posts.json?limit=1&tags=${ [...tags, ...options].join('+')}`
 		logger.info({ provider: name, endpoint }, 'Sending request.')
@@ -40,7 +40,7 @@ module.exports = function createDanbooruProvider (options) {
 				return null
 			}
 			if (json.length === 0) {
-				logger.warn({ provider: name, endpoint }, 'Got no results.')
+				logger.log({ provider: name, endpoint }, 'Got no results.')
 				return null
 			}
 			return json[0]
@@ -115,18 +115,21 @@ module.exports = function createDanbooruProvider (options) {
 		}
 		logger.info({ provider: name, lastId }, 'Running iteration.')
 		const post = await getMostRecentPost()
-		if (post === null) return;
+		if (post === null) {
+			logger.info({ provider: name, lastId, currId: post.id }, 'Checked but no new items.')
+			return;
+		}
 		logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
 		const postInfo = extractPostInfo(post)
 		logger.info({ provider: name, postInfo })
 		if (post.id === lastId) {
-			logger.info({ provider: name, lastId, currId: post.id }, 'Checked but no new items.')
+			logger.warn({ provider: name, lastId, currId: post.id }, 'Got post with same id as last post. There may be a bug or config issue.')
 			return;
 		}
 		lastId = post.id
 		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
 		if (persistence !== null) {
-			await persistence.push(`/providers/${name}/lastId`, post.id)
+			await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
 			await persistence.save()
 		}
 		logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
@@ -144,7 +147,7 @@ module.exports = function createDanbooruProvider (options) {
 	async function init() {
 		logger.info({ provider: name }, 'Initializing provider.')
 		if (persistence !== null) {
-			lastId = await persistence.getObjectDefault(`/providers/${name}/lastId`, null)
+			lastId = await persistence.getObjectDefault(`/extra/danbooru/lastIds/${name}`, null)
 		}
 	}
 
