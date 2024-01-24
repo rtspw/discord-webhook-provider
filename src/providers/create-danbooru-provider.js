@@ -84,14 +84,14 @@ module.exports = function createDanbooruProvider (options) {
 			if (['jpg', 'png', 'webp', 'gif', 'sfw'].includes(postInfo.fileExt)) {
 				return { image: { url: postInfo.fileUrl }}
 			}
-			if (['mp4'].includes(postInfo.fileExt)) {
+			if (['mp4', 'webm'].includes(postInfo.fileExt)) {
 				return { image: { url: postInfo.previewUrl }}
 			}
 			if (['zip'].includes(postInfo.fileExt)) {
 				logger.warn(`Ugoira file type not supported`)
 				return null
 			}
-			logger.warn(`Unknown file type`)
+			logger.warn({ provider: name, ext: postInfo.fileExt }, `Unknown file type`)
 			return null
 		})()
 		const embedArtist = postInfo.artists.length > 0 ? { description: `By **[${postInfo.readableArtists}](${postInfo.artistUrl})**` } : null
