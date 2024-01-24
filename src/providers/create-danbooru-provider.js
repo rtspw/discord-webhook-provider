@@ -97,7 +97,6 @@ module.exports = function createDanbooruProvider (options) {
 		const embedArtist = postInfo.artists.length > 0 ? { description: `By **[${postInfo.readableArtists}](${postInfo.artistUrl})**` } : null
 		return {
 			embeds: [{
-				author: { name: 'Danbooru' },
 				title: embedTitle,
 				url: postInfo.postUrl,
 				...embedArtist,
