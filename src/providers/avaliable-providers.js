@@ -7,6 +7,7 @@ const avaliableProviders = {
       name: { type: 'string' },
       tags: { type: 'array', subtype: { type: 'string' }},
       interval: { type: 'number', optional: true, restrictions: { min: 60000 }},
+      approvedOnly: { type: 'boolean', optional: true },
     },
   },
 }

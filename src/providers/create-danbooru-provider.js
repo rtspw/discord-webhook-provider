@@ -18,12 +18,14 @@ function cleanUpTags(tags) {
 
 module.exports = function createDanbooruProvider (options) {
 	let onProvide = null
-	const { name, tags, interval = 60000, persistence = null } = options
+	const { name, tags, interval = 60000, approvedOnly = false, persistence = null } = options
 	const type = 'danbooru'
-	const args = { name, tags, interval }
+	const args = { name, tags, interval, approvedOnly }
 	let state = 'idle'
 	let lastId = null
 	let timer = null
+	let approvalQueueTimer = null
+	const approvalQueue = []
 
 	async function getMostRecentPost() {
 		const options = []
@@ -33,6 +35,27 @@ module.exports = function createDanbooruProvider (options) {
 		}
 		const endpoint = `${baseEndpoint}/posts.json?limit=1&tags=${ [...tags, ...options].join('+')}`
 		logger.info({ provider: name, endpoint }, 'Sending request.')
+		try {
+			const result = await fetch(endpoint)
+			const json = await result.json()
+			if ('success' in json && !json.success) {
+				logger.error({ provider: name, endpoint, json }, 'Unsuccessful fetch.')
+				return null
+			}
+			if (json.length === 0) {
+				logger.info({ provider: name, endpoint }, 'Got no results.')
+				return null
+			}
+			return json[0]
+		} catch(e) {
+			logger.error(e)
+			return null
+		}
+	}
+
+	async function getPostWithId(id) {
+		const endpoint = `${baseEndpoint}/posts.json?tags=id:${id}`
+		logger.info({ provider: name, endpoint, id }, 'Sending request.')
 		try {
 			const result = await fetch(endpoint)
 			const json = await result.json()
@@ -112,35 +135,45 @@ module.exports = function createDanbooruProvider (options) {
 		}
 	}
 
-	async function runIteration() {
-		try {
-			if (onProvide === null) {
-				logger.warn({ provider: name }, 'Tried to run iteration but onProvide is not set.')
-				return;
-			}
-			logger.info({ provider: name, lastId }, 'Running iteration.')
-			const post = await getMostRecentPost()
-			if (post === null) {
-				logger.info({ provider: name, lastId }, 'Checked but no new items.')
-				return;
-			}
-			logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
-			const postInfo = extractPostInfo(post)
-			logger.info({ provider: name, postInfo }, 'Got post info.')
-			if (post.id === lastId) {
-				logger.warn({ provider: name, lastId, currId: post.id }, 'Got post with same id as last post. There may be a bug or config issue.')
-				return;
-			}
-			lastId = post.id
-			logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
-			if (persistence !== null) {
-				await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
-				await persistence.save()
-			}
-			if (postInfo.fileUrl === null || postInfo.previewUrl === null) {
-				logger.warn({ provider: name, lastId, currId: post.id }, 'FileUrl or PreviewUrl missing. Was the artist banned?')
-				return;
-			}
+	async function processResponse(post) {
+		if (post === null) {
+			logger.info({ provider: name, lastId }, 'Checked but no new items.')
+			return;
+		}
+		logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
+		const postInfo = extractPostInfo(post)
+		logger.info({ provider: name, postInfo }, 'Extracted post info.')
+		if (post.id === lastId) {
+			logger.warn({ provider: name, lastId, currId: post.id }, 'Got post with same id as last post. There may be a bug or config issue.')
+			return;
+		}
+		lastId = post.id
+		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
+		if (persistence !== null) {
+			await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
+			await persistence.save()
+		}
+		if (postInfo.isBanned) {
+			logger.warn({ provider: name, lastId, currId: post.id }, 'This post is banned.')
+			return;
+		}
+		if (postInfo.isDeleted) {
+			logger.warn({ provider: name, lastId, currId: post.id }, 'This post is deleted')
+			return;
+		}
+		if (postInfo.fileUrl === null || postInfo.previewUrl === null) {
+			logger.warn({ provider: name, lastId, currId: post.id }, 'FileUrl or PreviewUrl missing. Was the artist banned?')
+			return;
+		}
+		if (approvedOnly && postInfo.isPending) {
+			const expirationDate = new Date()
+			expirationDate.setDate(expirationDate.getDate() + 3)
+			logger.info({ provider: name, id: post.id, expirationDate }, 'Post is pending; appending to approvalQueue.')
+			approvalQueue.push({
+				id: postInfo.id,
+				expires: expirationDate,
+			})
+		} else {
 			logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
 			const webhook = convertPostToWebhook(postInfo)
 			onProvide({
@@ -151,6 +184,40 @@ module.exports = function createDanbooruProvider (options) {
 					info: postInfo,
 				}
 			})
+		}
+	}
+
+	async function runApprovalQueueIteration() {
+		logger.info({ provider: name, approvalQueue }, 'Running approval queue iteration.')
+		if (approvalQueue.length === 0) {
+			logger.info({ provider: name }, 'Queue empty.')
+		}
+		try {
+			if (onProvide === null) {
+				logger.warn({ provider: name }, 'Tried to run approval queue iteration but onProvide is not set.')
+				return;
+			}
+			const { id, expires } = approvalQueue.shift()
+			if (Date.now() >= expires) {
+				logger.info({ provider: name, id, expires }, 'Approval queue item expired.')
+				return;
+			}
+		  const post = await getPostWithId(id)
+			processResponse(post)
+		} catch (err) {
+			logger.error({ provider: name }, err)
+		}
+	}
+
+	async function runIteration() {
+		try {
+			if (onProvide === null) {
+				logger.warn({ provider: name }, 'Tried to run iteration but onProvide is not set.')
+				return;
+			}
+			logger.info({ provider: name, lastId }, 'Running iteration.')
+			const post = await getMostRecentPost()
+			processResponse(post)
 		} catch (err) {
 			logger.error({ provider: name }, err)
 		}
@@ -169,6 +236,10 @@ module.exports = function createDanbooruProvider (options) {
 		state = 'running'
 		runIteration()
 		timer = setInterval(runIteration, interval)
+		if (approvedOnly) {
+			runApprovalQueueIteration()
+			approvalQueueTimer = setInterval(runApprovalQueueIteration, Math.floor(interval + (interval / 2)))
+		}
 	}
 
   function stop() {
@@ -176,6 +247,9 @@ module.exports = function createDanbooruProvider (options) {
 		logger.info({ provider: name }, 'Stopping provider.')
 		state = 'idle'
 		clearInterval(timer)
+		if (approvedOnly) {
+			clearInterval(approvalQueueTimer)
+		}
 	}
 
 	return {
