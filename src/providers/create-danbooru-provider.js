@@ -135,7 +135,7 @@ module.exports = function createDanbooruProvider (options) {
 		}
 	}
 
-	async function processResponse(post) {
+	async function processResponse(post, isMostRecent = false) {
 		if (post === null) {
 			logger.info({ provider: name, lastId }, 'Checked but no new items.')
 			return;
@@ -143,15 +143,13 @@ module.exports = function createDanbooruProvider (options) {
 		logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
 		const postInfo = extractPostInfo(post)
 		logger.info({ provider: name, postInfo }, 'Extracted post info.')
-		if (post.id === lastId) {
-			logger.warn({ provider: name, lastId, currId: post.id }, 'Got post with same id as last post. There may be a bug or config issue.')
-			return;
-		}
-		lastId = post.id
-		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
-		if (persistence !== null) {
-			await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
-			await persistence.save()
+		if (isMostRecent) {
+			lastId = post.id
+			logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
+			if (persistence !== null) {
+				await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
+				await persistence.save()
+			}
 		}
 		if (postInfo.isBanned) {
 			logger.warn({ provider: name, lastId, currId: post.id }, 'This post is banned.')
@@ -191,6 +189,7 @@ module.exports = function createDanbooruProvider (options) {
 		logger.info({ provider: name, approvalQueue }, 'Running approval queue iteration.')
 		if (approvalQueue.length === 0) {
 			logger.info({ provider: name }, 'Queue empty.')
+			return;
 		}
 		try {
 			if (onProvide === null) {
@@ -217,7 +216,7 @@ module.exports = function createDanbooruProvider (options) {
 			}
 			logger.info({ provider: name, lastId }, 'Running iteration.')
 			const post = await getMostRecentPost()
-			processResponse(post)
+			processResponse(post, true)
 		} catch (err) {
 			logger.error({ provider: name }, err)
 		}
