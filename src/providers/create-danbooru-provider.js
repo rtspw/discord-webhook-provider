@@ -51,7 +51,7 @@ module.exports = function createDanbooruProvider (options) {
 	}
 
 	function extractPostInfo(post) {
-		const expectedFields = ['id', 'rating', 'tag_string_artist', 'tag_string_character', 'tag_string_general', 'tag_string_copyright', 'file_url', 'preview_file_url', 'file_ext', 'file_size']
+		const expectedFields = ['id', 'rating', 'tag_string_artist', 'tag_string_character', 'tag_string_general', 'tag_string_copyright', 'file_ext', 'file_size']
 		checkFieldsAreDefined(post, expectedFields)
 		return {
 			id: post.id,
@@ -64,10 +64,14 @@ module.exports = function createDanbooruProvider (options) {
 			createdAt: post?.created_at ?? (new Date()).toISOString(),
 			height: post?.image_height ?? 'Unknown',
 			width: post?.image_width ?? 'Unknown',
-			fileUrl: post.file_url,
-			previewUrl: post.preview_file_url,
+			fileUrl: post?.file_url ?? null,
+			previewUrl: post?.preview_file_url ?? null,
 			fileExt: post.file_ext,
 			fileSize: post.file_size,
+			isBanned: post.is_banned ?? false,
+			isDeleted: post.is_deleted ?? false,
+			isPending: post.is_pending ?? false,
+			isFlagged: post.is_flagged ?? false,
 			get readableArtists() { return makeReadableList(cleanUpTags(this.artists)) },
 			get readableCharacters() { return makeReadableList(cleanUpTags(this.characters)) },
 			get readableOrigin() { return makeReadableList(cleanUpTags(this.origin)) },
@@ -108,39 +112,47 @@ module.exports = function createDanbooruProvider (options) {
 	}
 
 	async function runIteration() {
-		if (onProvide === null) {
-			logger.warn({ provider: name }, 'Tried to run iteration but onProvide is not set.')
-			return;
-		}
-		logger.info({ provider: name, lastId }, 'Running iteration.')
-		const post = await getMostRecentPost()
-		if (post === null) {
-			logger.info({ provider: name, lastId }, 'Checked but no new items.')
-			return;
-		}
-		logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
-		const postInfo = extractPostInfo(post)
-		logger.info({ provider: name, postInfo })
-		if (post.id === lastId) {
-			logger.warn({ provider: name, lastId, currId: post.id }, 'Got post with same id as last post. There may be a bug or config issue.')
-			return;
-		}
-		lastId = post.id
-		logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
-		if (persistence !== null) {
-			await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
-			await persistence.save()
-		}
-		logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
-		const webhook = convertPostToWebhook(postInfo)
-		onProvide({
-			provider: {	name, type: 'danbooru' },
-			webhook,
-			metadata: {
-				raw: post,
-				info: postInfo,
+		try {
+			if (onProvide === null) {
+				logger.warn({ provider: name }, 'Tried to run iteration but onProvide is not set.')
+				return;
 			}
-		})
+			logger.info({ provider: name, lastId }, 'Running iteration.')
+			const post = await getMostRecentPost()
+			if (post === null) {
+				logger.info({ provider: name, lastId }, 'Checked but no new items.')
+				return;
+			}
+			logger.info({ provider: name }, 'Parsing raw data into PostInfo.')
+			const postInfo = extractPostInfo(post)
+			logger.info({ provider: name, postInfo }, 'Got post info.')
+			if (post.id === lastId) {
+				logger.warn({ provider: name, lastId, currId: post.id }, 'Got post with same id as last post. There may be a bug or config issue.')
+				return;
+			}
+			lastId = post.id
+			logger.info({ provider: name, id: post.id, dbKey: `/providers/${name}/lastId` }, 'Writing new post id.')
+			if (persistence !== null) {
+				await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
+				await persistence.save()
+			}
+			if (post.fileUrl === null || post.previewUrl === null) {
+				logger.warn({ provider: name, lastId, currId: post.id }, 'FileUrl or PreviewUrl missing. Was the artist banned?')
+				return;
+			}
+			logger.info({ provider: name, id: post.id }, 'Converting post into webhook.')
+			const webhook = convertPostToWebhook(postInfo)
+			onProvide({
+				provider: {	name, type: 'danbooru' },
+				webhook,
+				metadata: {
+					raw: post,
+					info: postInfo,
+				}
+			})
+		} catch (err) {
+			logger.error({ provider: name }, err)
+		}
 	}
 
 	async function init() {
