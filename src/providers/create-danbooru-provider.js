@@ -5,7 +5,7 @@ const baseEndpoint = 'https://danbooru.donmai.us'
 
 /** Makes booru style tags more human readable, e.g. klee_(genshin_impact) -> Klee */
 function cleanUpTags(tags) {
-	return tags
+	const tagTokens = tags
 	  .map(tag => {
 			if (tag.endsWith(')')) {
 				tag = tag.slice(0, tag.lastIndexOf('(') - 1)
@@ -13,6 +13,7 @@ function cleanUpTags(tags) {
 			const tokens = tag.split('_').map(capitalizeFirstLetter)
 			return tokens.join(' ')
 		})
+	return [...new Set(tagTokens)]
 }
 
 module.exports = function createDanbooruProvider (options) {
