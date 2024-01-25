@@ -137,7 +137,7 @@ module.exports = function createDanbooruProvider (options) {
 				await persistence.push(`/extra/danbooru/lastIds/${name}`, post.id)
 				await persistence.save()
 			}
-			if (post.fileUrl === null || post.previewUrl === null) {
+			if (postInfo.fileUrl === null || postInfo.previewUrl === null) {
 				logger.warn({ provider: name, lastId, currId: post.id }, 'FileUrl or PreviewUrl missing. Was the artist banned?')
 				return;
 			}
