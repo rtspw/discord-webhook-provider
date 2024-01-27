@@ -25,7 +25,7 @@ module.exports = function createDanbooruProvider (options) {
 	let lastId = null
 	let timer = null
 	let approvalQueueTimer = null
-	const approvalQueue = []
+	let approvalQueue = []
 
 	async function getMostRecentPost() {
 		const options = []
@@ -203,6 +203,8 @@ module.exports = function createDanbooruProvider (options) {
 			}
 		  const post = await getPostWithId(id)
 			processResponse(post)
+			logger.info({ provider: name, dbKey: '/extra/danbooru/approvalQueue', length: approvalQueue.length }, 'Saving approval queue')
+			await persistence.push(`/extra/danbooru/approvalQueue/${name}`, approvalQueue)
 		} catch (err) {
 			logger.error({ provider: name }, err)
 		}
@@ -226,6 +228,7 @@ module.exports = function createDanbooruProvider (options) {
 		logger.info({ provider: name }, 'Initializing provider.')
 		if (persistence !== null) {
 			lastId = await persistence.getObjectDefault(`/extra/danbooru/lastIds/${name}`, null)
+			approvalQueue = await persistence.getObjectDefault(`/extra/danbooru/approvalQueue/${name}`, [])
 		}
 	}
 
