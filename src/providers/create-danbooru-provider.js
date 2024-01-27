@@ -53,9 +53,9 @@ module.exports = function createDanbooruProvider (options) {
 		}
 	}
 
-	async function getPostWithId(id) {
-		const endpoint = `${baseEndpoint}/posts.json?tags=id:${id}`
-		logger.info({ provider: name, endpoint, id }, 'Sending request.')
+	async function getPostsWithIds(ids) {
+		const endpoint = `${baseEndpoint}/posts.json?tags=id:${ids.join(',')}`
+		logger.info({ provider: name, endpoint, ids }, 'Sending request for posts with ids.')
 		try {
 			const result = await fetch(endpoint)
 			const json = await result.json()
@@ -67,7 +67,7 @@ module.exports = function createDanbooruProvider (options) {
 				logger.info({ provider: name, endpoint }, 'Got no results.')
 				return null
 			}
-			return json[0]
+			return json
 		} catch(e) {
 			logger.error(e)
 			return null
@@ -196,13 +196,18 @@ module.exports = function createDanbooruProvider (options) {
 				logger.warn({ provider: name }, 'Tried to run approval queue iteration but onProvide is not set.')
 				return;
 			}
-			const { id, expires } = approvalQueue.shift()
-			if (Date.now() >= expires) {
-				logger.info({ provider: name, id, expires }, 'Approval queue item expired.')
-				return;
-			}
-		  const post = await getPostWithId(id)
-			processResponse(post)
+			const numItemsToCheck = Math.min(approvalQueue.length, 10)
+			const itemsToCheck = approvalQueue.slice(0, numItemsToCheck)
+			  .filter(({ id, expires }) => {
+					const isExpired = Date.now() >= expires
+					if (isExpired) {
+						logger.info({ provider: name, id, expires }, 'Approval queue item expired.')
+					}
+					return !isExpired
+				})
+			approvalQueue = approvalQueue.slice(numItemsToCheck)
+		  const posts = await getPostsWithIds(itemsToCheck.map(({ id }) => id))
+			posts.forEach((post) => { processResponse(post) })
 			logger.info({ provider: name, dbKey: '/extra/danbooru/approvalQueue', length: approvalQueue.length }, 'Saving approval queue')
 			await persistence.push(`/extra/danbooru/approvalQueue/${name}`, approvalQueue)
 		} catch (err) {
