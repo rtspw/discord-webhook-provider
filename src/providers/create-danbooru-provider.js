@@ -205,11 +205,11 @@ module.exports = function createDanbooruProvider (options) {
 					}
 					return !isExpired
 				})
-			approvalQueue = approvalQueue.slice(numItemsToCheck)
 		  const posts = await getPostsWithIds(itemsToCheck.map(({ id }) => id))
-			posts.forEach((post) => { processResponse(post) })
+			await Promise.all(posts.map((post) => processResponse(post)))
 			logger.info({ provider: name, dbKey: '/extra/danbooru/approvalQueue', length: approvalQueue.length }, 'Saving approval queue')
 			await persistence.push(`/extra/danbooru/approvalQueue/${name}`, approvalQueue)
+			approvalQueue = approvalQueue.slice(numItemsToCheck)
 		} catch (err) {
 			logger.error({ provider: name }, err)
 		}
