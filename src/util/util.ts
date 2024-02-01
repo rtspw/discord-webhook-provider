@@ -1,4 +1,4 @@
-function formatBytes(bytes, decimals = 2) {
+export function formatBytes(bytes: number, decimals = 2) {
 	if (!+bytes) return '0 Bytes'
 	const k = 1024
 	const dm = decimals < 0 ? 0 : decimals
@@ -7,7 +7,7 @@ function formatBytes(bytes, decimals = 2) {
 	return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`
 }
 
-function makeReadableList(list) {
+export function makeReadableList(list: string[]) {
 	if (list.length === 0) return ''
 	if (list.length === 1) return list[0]
 	if (list.length === 2) return `${list[0]} and ${list[1]}`
@@ -16,25 +16,17 @@ function makeReadableList(list) {
 	return copy.join(', ')
 }
 
-function capitalizeFirstLetter(token) {
+export function capitalizeFirstLetter(token: string) {
 	return token.charAt(0).toUpperCase() + token.slice(1);
 }
 
-function truncateString(string, limit = 96) {
+export function truncateString(string: string, limit = 96) {
 	if (string.length < limit) return string
 	return string.slice(0, limit - 3) + '...'
 }
 
-function checkFieldsAreDefined(obj, fields) {
+export function checkFieldsAreDefined(obj: Record<string, any>, fields: string[]) {
 	for (const field of fields) {
 		if (obj[field] === undefined) throw new Error(`Field ${field} undefined`)
 	}
-}
-
-module.exports = {
-	formatBytes,
-	makeReadableList,
-	capitalizeFirstLetter,
-	truncateString,
-	checkFieldsAreDefined,
 }

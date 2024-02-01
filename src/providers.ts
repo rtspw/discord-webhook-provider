@@ -1,36 +1,39 @@
-const logger = require('pino')()
+import logger from "./globals/logger"
+import { type ProvideHandler, type Provider } from "./providers/provider"
 
-class Providers {
-	constructor(providers = {}) {
+export default class Providers {
+	providers: Record<string, Provider>
+
+	constructor(providers: Record<string, Provider> = {}) {
 		this.providers = providers
 	}
 
-	add(name, provider) {
+	add(name: string, provider: Provider) {
 		logger.info({ name, provider })
 		this.providers[name] = provider
 	}
 
-	get(name) {
+	get(name: string) {
 		if (!(name in this.providers)) throw new Error(`Provider (${name}) was not found`)
 		return this.providers[name]
 	}
 
-	start(name) {
+	start(name: string) {
 		const provider = this.get(name)
 		logger.info({ provider: name }, 'Trying to start provider.')
 		provider.start()
 	}
 
-	stop(name) {
+	stop(name: string) {
 		const provider = this.get(name)
 		logger.info({ provider: name }, 'Trying to stop provider.')
 		provider.stop()
 	}
 
-	async init(name) {
+	async init(name: string) {
 		const provider = this.get(name)
 		logger.info({ provider: name }, 'Trying to initialize provider.')
-		await provider.init()
+		provider.init()
 	}
 
 	async initAll() {
@@ -45,15 +48,13 @@ class Providers {
 		Object.keys(this.providers).forEach((name) => { this.stop(name) })
 	}
 
-	setOnProvide(name, onProvide) {
+	setOnProvide(name: string, onProvide: ProvideHandler) {
 		const provider = this.get(name)
 		provider.onProvide = onProvide
 	}
 
-	unsetOnProvide(name) {
+	unsetOnProvide(name: string) {
 		const provider = this.get(name)
-		provider.onProvide = null
+		provider.onProvide = () => {}
 	}
 }
-
-module.exports = Providers
