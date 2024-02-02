@@ -22,7 +22,7 @@ export default class Personalities {
 		logger.info({ name }, 'Personality deleted.')
 	}
 
-	appendToWebhook(name: string , webhook: Webhook) {
+	appendToWebhook(name: string , webhook: Webhook): Webhook {
 		logger.info({ name, webhook }, 'Appending personality to webhook.')
 		if (!name || !(name in this.persons)) {
 			logger.warn({ name }, 'Tried to append personality that did not exist.')

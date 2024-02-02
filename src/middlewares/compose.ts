@@ -98,9 +98,6 @@ export function composeWithRegistry(registry: MiddlewareRegistry, ...middlewareO
   if (middlewareOrRegistryNameItems.length === 0) {
     return new IdentityMiddleware({})
   }
-  if (middlewareOrRegistryNameItems.length === 1) {
-    return resolveMiddleware(registry, middlewareOrRegistryNameItems[0])
-  }
   return new ComposedWithRegisteredItemsMiddleware({
     children: middlewareOrRegistryNameItems,
     registry,

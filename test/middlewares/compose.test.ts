@@ -1,27 +1,9 @@
-import { type ComposedMiddleware, compose, composeWithRegistry } from "../../src/middlewares/compose"
+import { type ComposedMiddleware, compose, composeWithRegistry, ComposedWithRegisteredItemsMiddleware } from "../../src/middlewares/compose"
 import { Middleware } from "../../src/middlewares/middleware"
 import { type ProvideData } from "../../src/providers/provider"
 import { MiddlewareRegistry } from "../../src/middlewares/registry"
 
-function createMockPacket(type: string = 'fake'): ProvideData {
-  return {
-    provider: { name: 'fake', type },
-    webhook: {},
-    metadata: {},
-  }
-}
-
-function createMockMiddleware(
-  fn: (data: ProvideData) => ProvideData | null,
-  acceptedTypes: string[] | 'all' = 'all',
-) {
-  class MockMiddleware extends Middleware {
-    type = 'mock'
-    acceptedTypes = acceptedTypes
-    process = fn
-  }
-  return new MockMiddleware({})
-}
+import { createMockMiddleware, createMockPacket } from "../mocks"
 
 describe('Composing middleware', () => {
   test('Composing nothing returns identity', () => {
@@ -94,7 +76,17 @@ describe('Composing middleware', () => {
     expect(c4.run(packetB)).not.toBeNull()
   })
 
-  test('Compose with registry', () => {
+  test('Compose one with registry returns composed middleware', () => {
+    const packet = createMockPacket()
+    const registry = new MiddlewareRegistry()
+    const m1 = createMockMiddleware(x => ({ ...x, metadata: { foo: 'bar' }}))
+    registry.add('m1', m1)
+    const c1 = composeWithRegistry(registry, 'm1')
+    expect(c1 instanceof ComposedWithRegisteredItemsMiddleware).toEqual(true)
+    expect(c1.run(packet)).toEqual(m1.run(packet))
+  })
+
+  test('Compose multiple with registry', () => {
     const packet = createMockPacket()
     const registry = new MiddlewareRegistry()
     const m1 = createMockMiddleware(x => ({ ...x, metadata: { foo: 'bar' }}))
@@ -104,7 +96,9 @@ describe('Composing middleware', () => {
     registry.add('m2', m2)
     registry.add('m3', m3)
     const c1 = composeWithRegistry(registry, 'm1', 'm2', 'm3')
+    const c2 = composeWithRegistry(registry, 'm1', m2, 'm3')
     expect(c1.run(packet)).toEqual(m3.run(m2.run(m1.run(packet) as ProvideData) as ProvideData))
+    expect(c2.run(packet)).toEqual(m3.run(m2.run(m1.run(packet) as ProvideData) as ProvideData))
   })
 
   test('Compose with registry allows dynamic swapping of middleware', () => {

@@ -1,5 +1,5 @@
 import logger from './globals/logger'
-import { compose } from './middlewares/compose'
+import { composeWithRegistry } from './middlewares/compose'
 
 import Providers from './providers'
 import WebhookEndpoints from './webhook-endpoints'
@@ -26,6 +26,13 @@ export interface Subscription {
 
 export type Subscriptions = Record<string, Subscription[]>
 
+export interface AddMappingOptions {
+	from: string;
+	to: string;
+	middlewares?: (Middleware | string)[];
+	personality?: string | null;
+}
+
 export default class Mappings {
 	private providers: Providers
 	private endpoints: WebhookEndpoints
@@ -45,7 +52,7 @@ export default class Mappings {
 		this._nextId = 0
 	}
 
-	_addSubscriber(from: string, to: string, mappingId: number, callback: SubscriptionCallback) {
+	private addSubscriber(from: string, to: string, mappingId: number, callback: SubscriptionCallback) {
 		if (!(from in this.subscriptions)) {
 			this.subscriptions[from] = [{ to, mappingId, callback }]
 			this.providers.setOnProvide(from, (data) => {
@@ -58,7 +65,7 @@ export default class Mappings {
 		}
 	}
 
-	_removeSubscriber(from: string, to: string, mappingId: number) {
+	private _removeSubscriber(from: string, to: string, mappingId: number) {
 		if (!(from in this.subscriptions)) {
 			return;
 		} else {
@@ -77,30 +84,26 @@ export default class Mappings {
 		return nextId
 	}
 
-	_resolveMiddlewares(unresolvedMiddlewares) {
+	private resolveMiddlewares(unresolvedMiddlewares: (Middleware | string)[]) {
 		return unresolvedMiddlewares.map(item => 
-			(typeof item) === 'string' ? this.middlewareRegistry.get(item) : item)
+			typeof item === 'string' ? this.middlewareRegistry.get(item) : item)
 	}
 
-	addMapping({ from, to, middlewares = [], personality = null}) {
+	addMapping({ from, to, middlewares = [], personality = null}: AddMappingOptions) {
 		logger.info({ from, to, personality }, 'Adding new mapping.')
 		const mappingId = this.getNextId()
 		this.mappings.push({ id: mappingId, from, to, middlewares, personality })
-		const composedMiddleware = compose(...this._resolveMiddlewares(middlewares))
-		this._addSubscriber(from, to, mappingId, (data) => {
-			logger.info({ from, to, mappingId  }, 'Sending data through middleware')
+		const composedMiddleware = composeWithRegistry(this.middlewareRegistry, ...middlewares)
+		this.addSubscriber(from, to, mappingId, (data) => {
+			if (personality !== null) {
+				logger.info({ from, to, mappingId, personality }, 'Appending personality to webhook.')
+				data.webhook = this.personalities.appendToWebhook(personality, data.webhook)
+			}
+			logger.info({ from, to, mappingId }, 'Sending data through middleware')
 			const dataAfterMiddleware = composedMiddleware.run(data)
 			if (dataAfterMiddleware === null) return;
-			const finalWebhook = (() => {
-				if (personality !== null) {
-					logger.info({ from, to, mappingId, personality }, 'Appending personality to webhook.')
-					return this.personalities.appendToWebhook(personality, dataAfterMiddleware.webhook)
-				} else {
-					return dataAfterMiddleware.webhook
-				}
-			})()
-			logger.info({ from, to, mappingId, finalWebhook }, 'Sending webhook.')
-			this.endpoints.sendWebhook(to, finalWebhook)
+			logger.info({ from, to, mappingId, webhook: dataAfterMiddleware.webhook }, 'Sending webhook.')
+			this.endpoints.sendWebhook(to, dataAfterMiddleware.webhook)
 		})
 	}
 
